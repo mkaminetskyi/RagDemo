@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: semantic-search-demo
+  ai:
+    ollama:
+      chat:
+        options:
+          model: llama3.2
+          temperature: 0.7
+        base-url: http://localhost:11434
+      embedding:
+        options:
+          model: nomic-embed-text
+        base-url: http://localhost:11434
+    vectorstore:
+      pgvector:
+        initialize-schema: true
+        dimensions: 768
+        index-type: hnsw
+  datasource:
+      url: jdbc:postgresql://localhost:5432/vector_db
+      username: postgres
+      password: postgres
+      driver-class-name: org.postgresql.Driver
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
