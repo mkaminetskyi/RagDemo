@@ -4,6 +4,7 @@ CREATE TABLE product_categories (
     description TEXT
 );
 
+-- Постачальники
 CREATE TABLE suppliers (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -11,13 +12,7 @@ CREATE TABLE suppliers (
     reliability_score INTEGER NOT NULL
 );
 
-CREATE TABLE customers (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    loyalty_tier VARCHAR(50)
-);
-
+-- Товари
 CREATE TABLE products (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -28,13 +23,23 @@ CREATE TABLE products (
     supplier_id INTEGER REFERENCES suppliers(id)
 );
 
-CREATE TABLE purchase_orders (
+-- Клієнти
+CREATE TABLE customers (
     id SERIAL PRIMARY KEY,
-    reference VARCHAR(100) NOT NULL,
-    status VARCHAR(50) NOT NULL,
-    customer_id INTEGER REFERENCES customers(id)
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255),
+    loyalty_tier VARCHAR(50)
 );
 
+-- Замовлення
+CREATE TABLE purchase_orders (
+    id SERIAL PRIMARY KEY,
+    customer_id INTEGER REFERENCES customers(id),
+    status VARCHAR(50),
+    reference VARCHAR(100)
+);
+
+-- Позиції замовлень
 CREATE TABLE purchase_order_lines (
     id SERIAL PRIMARY KEY,
     order_id INTEGER REFERENCES purchase_orders(id),
