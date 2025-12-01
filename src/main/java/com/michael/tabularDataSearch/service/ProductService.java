@@ -1,5 +1,6 @@
 package com.michael.tabularDataSearch.service;
 
+import com.michael.tabularDataSearch.dto.InventorySummary;
 import com.michael.tabularDataSearch.entity.Product;
 import com.michael.tabularDataSearch.repository.ProductRepository;
 import lombok.AllArgsConstructor;
@@ -24,5 +25,21 @@ public class ProductService {
 
     public Product findProductById(int id) {
         return productRepository.findById(id).orElse(null);
+    }
+
+    public List<Product> findProductsByNameFragment(String nameFragment) {
+        return productRepository.findByNameContainingIgnoreCase(nameFragment);
+    }
+
+    public List<Product> findLowStockProducts(int threshold) {
+        return productRepository.findByQuantityLessThanEqualOrderByQuantityAsc(threshold);
+    }
+
+    public List<Product> findProductsBySupplier(String supplierName) {
+        return productRepository.findBySupplierName(supplierName);
+    }
+
+    public List<InventorySummary> summarizeInventoryByCategory() {
+        return productRepository.summarizeInventoryByCategory();
     }
 }

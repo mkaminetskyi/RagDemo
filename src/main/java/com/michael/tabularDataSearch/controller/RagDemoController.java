@@ -38,7 +38,6 @@ public class RagDemoController {
     private final ProductService productService;
 
     @GetMapping("/chatWithRag")
-    // Demo: baseline RAG chat that augments the prompt with similar documents from the vector store
     public String chatWithRag(@RequestParam(value = "message") String message) {
         try {
             QuestionAnswerAdvisor qaAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
@@ -61,7 +60,6 @@ public class RagDemoController {
     }
 
     @GetMapping("/chatWithRagAndTool")
-    // Demo: RAG + function calling – the model can call ProductTools to fetch relational data
     public String chatWithRagAndToolCalling(@RequestParam(value = "message") String message) {
         try {
             return chatClient.prompt()
@@ -74,37 +72,7 @@ public class RagDemoController {
         }
     }
 
-    @GetMapping("/search-product")
-    // Demo: semantic lookup of nearby product names stored as embeddings in the vector store
-    public List<ProductDetails> searchProduct(@RequestParam("name") String name) {
-        return productTools.findClosestProducts(name, 3);
-    }
-
-    @GetMapping("/ask-product-question")
-    // Demo: tabular grounding – the LLM receives product rows as context to answer catalog questions
-    public String askProductQuestion(@RequestParam("question") String question) {
-        List<ProductDetails> products = productTools.findClosestProducts(question, 20);
-
-        StringBuilder promptBuilder = new StringBuilder("Product Info:\n");
-        for (ProductDetails product : products) {
-            promptBuilder.append("Name: ")
-                    .append(product.name())
-                    .append(", Price: ")
-                    .append(product.price())
-                    .append(", Quantity: ")
-                    .append(product.quantity())
-                    .append("\n");
-        }
-        promptBuilder.append("\n").append(question);
-
-        return chatClient.prompt()
-                .user(promptBuilder.toString())
-                .call()
-                .content();
-    }
-
     @GetMapping("/text-to-sql")
-    // Demo: text-to-SQL pipeline – generate SQL from a natural-language ask and summarize the result
     public ResponseEntity<String> textToSql(@RequestParam("question") String question) {
         try {
             String schema = SchemaDescriptions.TABULAR_RAG_SCHEMA;
@@ -139,8 +107,35 @@ public class RagDemoController {
         }
     }
 
+
+    @GetMapping("/search-product")
+    public List<ProductDetails> searchProduct(@RequestParam("name") String name) {
+        return productTools.findClosestProducts(name, 3);
+    }
+
+    @GetMapping("/ask-product-question")
+    public String askProductQuestion(@RequestParam("question") String question) {
+        List<ProductDetails> products = productTools.findClosestProducts(question, 20);
+
+        StringBuilder promptBuilder = new StringBuilder("Product Info:\n");
+        for (ProductDetails product : products) {
+            promptBuilder.append("Name: ")
+                    .append(product.name())
+                    .append(", Price: ")
+                    .append(product.price())
+                    .append(", Quantity: ")
+                    .append(product.quantity())
+                    .append("\n");
+        }
+        promptBuilder.append("\n").append(question);
+
+        return chatClient.prompt()
+                .user(promptBuilder.toString())
+                .call()
+                .content();
+    }
+
     @GetMapping("/search-document")
-    // Demo: similarity search over unstructured documents stored in the vector store
     public List<DocumentSearchResult> searchDocument(@RequestBody DocumentRequest request) {
         List<Document> similarDocuments = vectorStore.similaritySearch(SearchRequest.builder()
                 .query(request.content())
@@ -156,50 +151,7 @@ public class RagDemoController {
                 .toList();
     }
 
-    @PostMapping("/add-document")
-    // Demo: push raw text snippets into the vector store for later retrieval
-    public void addDocumentToVectorStore(@RequestBody DocumentRequest request) {
-        Document document = new Document(request.content());
-
-        vectorStore.add(List.of(document));
-
-        log.info("Successfully added document to vector store");
-    }
-
-    @PostMapping("/upload-csv-file")
-    // Demo: ingest structured CSV rows, chunk them, and embed into the vector store
-    public ResponseEntity<String> uploadCsvFile(@RequestParam("file") MultipartFile file) throws IOException {
-        if (file.isEmpty()) {
-            return ResponseEntity.badRequest().body("Please upload a file");
-        }
-
-        List<Document> documents = DocumentUtils.readCsvAsDocuments(file);
-
-        vectorStore.add(documents);
-
-        return ResponseEntity.ok("Successfully embedded and stored " +
-                documents.size() + " chunks");
-    }
-
-    @PostMapping("/upload-text-file")
-    // Demo: ingest a plain text file, chunk it, embed it, and store for RAG
-    public ResponseEntity<String> uploadTextFile(@RequestParam("file") MultipartFile file)
-            throws IOException {
-        String content = new String(file.getBytes(), StandardCharsets.UTF_8);
-        List<String> chunks = DocumentUtils.splitIntoChunks(content, 40);
-
-        List<Document> documents = chunks.stream()
-                .map(Document::new)
-                .toList();
-
-        vectorStore.add(documents);
-
-        return ResponseEntity.ok("Successfully embedded and stored " +
-                documents.size() + " chunks");
-    }
-
     @PostMapping("/add-products-to-vector-store")
-    // Demo: vectorize relational rows (products) so they can participate in semantic search
     public ResponseEntity<String> addProductsToVectorStore() {
         List<Product> products = productService.findAllProducts();
 
@@ -213,41 +165,13 @@ public class RagDemoController {
                 documents.size() + " products");
     }
 
-    @PostMapping("/add-default-documents")
-    // Demo: bootstrap vector store with toy facts for a quick RAG walkthrough
-    public void addDefaultDocumentToVectorStore() {
-        List<String> facts = List.of(
-                "Albert Einstein was a physicist known for the theory of relativity.",
-                "Marie Curie won two Nobel Prizes in Physics and Chemistry.",
-                "Isaac Newton formulated the laws of motion and gravity.",
-                "Nikola Tesla invented the alternating current system.",
-                "Ada Lovelace is considered the first computer programmer.",
-                "Galileo was an astronomer who supported heliocentrism.",
-                "Leonardo da Vinci painted the Mona Lisa.",
-                "Vincent van Gogh was a Dutch post-impressionist painter.",
-                "Mozart was a prolific and influential composer of the classical era.",
-                "Beethoven composed music even after losing his hearing.",
-                "Einstein was not known for his musical talents.",
-                "Curie did not work on computer science."
-        );
+    @DeleteMapping("/delete-all-embeddings")
+    public ResponseEntity<String> deleteAllEmbeddings() {
+        jdbcTemplate.execute("DELETE FROM embeddings");
 
-        List<Document> documents = facts.stream()
-                .map(Document::new)
-                .toList();
+        log.info("All embeddings are deleted");
 
-        vectorStore.add(documents);
-
-        log.info("Successfully added default documents to vector store");
-    }
-
-    @DeleteMapping("/delete-all-documents")
-    // Demo: clear the vector store between scenarios to keep your talk deterministic
-    public ResponseEntity<String> deleteAllDocuments() {
-        jdbcTemplate.execute("DELETE FROM vector_store");
-
-        log.info("All documents deleted from vector store");
-
-        return ResponseEntity.ok("All documents deleted");
+        return ResponseEntity.ok("All embeddings are deleted");
     }
 
     private String stripCodeFences(String sqlResponse) {
@@ -269,6 +193,7 @@ public class RagDemoController {
         return cleaned.trim();
     }
 
+    // User with read only rights should be created
     private boolean isSelectQuery(String sql) {
         String normalized = sql.trim();
         String lowerCaseSql = normalized.toLowerCase(Locale.ROOT);

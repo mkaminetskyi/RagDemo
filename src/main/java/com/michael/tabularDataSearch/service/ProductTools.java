@@ -1,6 +1,7 @@
 package com.michael.tabularDataSearch.service;
 
 import com.michael.tabularDataSearch.dto.ProductDetails;
+import com.michael.tabularDataSearch.dto.InventorySummary;
 import com.michael.tabularDataSearch.entity.Product;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -24,18 +26,9 @@ public class ProductTools {
     public ProductDetails getProductDetails(String productName) {
         log.info("!Get Product details by name: {}", productName);
 
-        Product product = productService.findProductByName(productName);
-
-        log.info("Product {}", product.getName());
-
-        if (product != null) {
-            return new ProductDetails(product.getId(),
-                    product.getName(),
-                    product.getPrice(),
-                    product.getQuantity());
-        } else {
-            return new ProductDetails(0, "Not Found", 0, 0);
-        }
+        return Optional.ofNullable(productService.findProductByName(productName))
+                .map(this::toProductDetails)
+                .orElseGet(() -> new ProductDetails(0, "Not Found", 0, 0));
     }
 
     @Tool(description = "Find top K products by closest name")
@@ -51,10 +44,7 @@ public class ProductTools {
                     if (idNum != null) {
                         Product product = productService.findProductById(idNum.intValue());
                         if (product != null) {
-                            return new ProductDetails(product.getId(),
-                                    product.getName(),
-                                    product.getPrice(),
-                                    product.getQuantity());
+                            return toProductDetails(product);
                         }
                     }
                     return null;
@@ -63,28 +53,47 @@ public class ProductTools {
                 .toList();
     }
 
-//    // @Tool(description = "Find product by closest name")
-//    public ProductDetails findClosestProduct(String productName) {
-//        log.info("Search product by similar name: {}", productName);
-//
-//        List<Document> documents = vectorStore.similaritySearch(
-//                SearchRequest.builder().query(productName).topK(1).build());
-//
-//        if (!Objects.requireNonNull(documents).isEmpty()) {
-//            Document doc = documents.getFirst();
-//            Number idNum = (Number) doc.getMetadata().get("productId");
-//            if (idNum != null) {
-//                Product product = productService.findProductById(idNum.intValue());
-//
-//                if (product != null) {
-//                    return new ProductDetails(product.getId(),
-//                            product.getName(),
-//                            product.getPrice(),
-//                            product.getQuantity());
-//                }
-//            }
-//        }
-//
-//        return new ProductDetails(0, "Not Found", 0, 0);
-//    }
+    @Tool(description = "Search products whose names contain the provided phrase")
+    public List<ProductDetails> searchProductsByName(String phrase) {
+        log.info("Searching products by name fragment: {}", phrase);
+
+        return productService.findProductsByNameFragment(phrase)
+                .stream()
+                .map(this::toProductDetails)
+                .toList();
+    }
+
+    @Tool(description = "List low-stock products at or below the threshold")
+    public List<ProductDetails> listLowStock(int threshold) {
+        log.info("Listing products at or below stock threshold {}", threshold);
+
+        return productService.findLowStockProducts(threshold)
+                .stream()
+                .map(this::toProductDetails)
+                .toList();
+    }
+
+    @Tool(description = "Find all products supplied by the given supplier name")
+    public List<ProductDetails> productsBySupplier(String supplierName) {
+        log.info("Finding products for supplier {}", supplierName);
+
+        return productService.findProductsBySupplier(supplierName)
+                .stream()
+                .map(this::toProductDetails)
+                .toList();
+    }
+
+    @Tool(description = "Summarize inventory by category with totals and averages")
+    public List<InventorySummary> summarizeInventory() {
+        log.info("Summarizing inventory by category");
+
+        return productService.summarizeInventoryByCategory();
+    }
+
+    private ProductDetails toProductDetails(Product product) {
+        return new ProductDetails(product.getId(),
+                product.getName(),
+                product.getPrice(),
+                product.getQuantity());
+    }
 }
