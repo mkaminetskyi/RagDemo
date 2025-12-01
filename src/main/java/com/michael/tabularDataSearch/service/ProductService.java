@@ -1,7 +1,7 @@
-package com.michael.ragdemo.service;
+package com.michael.tabularDataSearch.service;
 
-import com.michael.ragdemo.entity.Product;
-import com.michael.ragdemo.repository.ProductRepository;
+import com.michael.tabularDataSearch.entity.Product;
+import com.michael.tabularDataSearch.repository.ProductRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

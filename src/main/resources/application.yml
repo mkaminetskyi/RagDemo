@@ -1,27 +1,39 @@
 spring:
-  application:
-    name: semantic-search-demo
+  datasource:
+    url: jdbc:postgresql://localhost:5432/vector_db
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
   ai:
-    ollama:
+    chat:
+      client:
+        enabled: false   # Multiple ChatClients are defined ourselves
+    openai:
+      api-key: ${AI_OPENAI_API_KEY}
       chat:
         options:
-          model: llama3.2
+          model: gpt-4o
           temperature: 0.7
-        base-url: http://localhost:11434
       embedding:
         options:
-          model: nomic-embed-text
-        base-url: http://localhost:11434
+          model: text-embedding-3-small
     vectorstore:
       pgvector:
         initialize-schema: true
-        dimensions: 768
+        dimensions: 1536
         index-type: hnsw
-  datasource:
-      url: jdbc:postgresql://localhost:5432/vector_db
-      username: postgres
-      password: postgres
-      driver-class-name: org.postgresql.Driver
+        table-name: database_vectors
 
-  jpa:
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
+ai:
+  models:
+    smart:
+      id: gpt-4.1
+      temperature: 1.0
+    cheap:
+      id: gpt-5-mini
+      temperature: 1.0

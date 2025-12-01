@@ -1,4 +1,4 @@
-package com.michael.ragdemo.utils;
+package com.michael.tabularDataSearch.utils;
 
 import lombok.experimental.UtilityClass;
 import org.apache.commons.csv.CSVFormat;

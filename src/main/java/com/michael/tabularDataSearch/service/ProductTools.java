@@ -1,7 +1,7 @@
-package com.michael.ragdemo.service;
+package com.michael.tabularDataSearch.service;
 
-import com.michael.ragdemo.dto.ProductDetails;
-import com.michael.ragdemo.entity.Product;
+import com.michael.tabularDataSearch.dto.ProductDetails;
+import com.michael.tabularDataSearch.entity.Product;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
@@ -38,7 +38,7 @@ public class ProductTools {
         }
     }
 
-   // @Tool(description = "Find top K products by closest name")
+    @Tool(description = "Find top K products by closest name")
     public List<ProductDetails> findClosestProducts(String productName, int topK) {
         log.info("Search products by similar name: {}, topK: {}", productName, topK);
 

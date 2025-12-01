@@ -1,4 +1,4 @@
-package com.michael.ragdemo.dto;
+package com.michael.tabularDataSearch.dto;
 
 import java.util.List;
 

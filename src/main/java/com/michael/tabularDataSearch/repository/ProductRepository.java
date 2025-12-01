@@ -1,6 +1,6 @@
-package com.michael.ragdemo.repository;
+package com.michael.tabularDataSearch.repository;
 
-import com.michael.ragdemo.entity.Product;
+import com.michael.tabularDataSearch.entity.Product;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

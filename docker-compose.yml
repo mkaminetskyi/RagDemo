@@ -12,15 +12,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollamas
-    entrypoint: >
-      sh -c "ollama serve & sleep 5 && ollama pull nomic-embed-text && wait"
-
-volumes:
-  ollama_data:

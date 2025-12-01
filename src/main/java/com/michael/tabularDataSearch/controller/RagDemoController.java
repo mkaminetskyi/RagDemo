@@ -1,12 +1,13 @@
-package com.michael.ragdemo.controller;
+package com.michael.tabularDataSearch.controller;
 
-import com.michael.ragdemo.dto.DocumentRequest;
-import com.michael.ragdemo.dto.DocumentSearchResult;
-import com.michael.ragdemo.dto.ProductDetails;
-import com.michael.ragdemo.entity.Product;
-import com.michael.ragdemo.service.ProductService;
-import com.michael.ragdemo.service.ProductTools;
-import com.michael.ragdemo.utils.DocumentUtils;
+import com.michael.tabularDataSearch.dto.DocumentRequest;
+import com.michael.tabularDataSearch.dto.DocumentSearchResult;
+import com.michael.tabularDataSearch.dto.ProductDetails;
+import com.michael.tabularDataSearch.entity.Product;
+import com.michael.tabularDataSearch.service.ProductService;
+import com.michael.tabularDataSearch.service.ProductTools;
+import com.michael.tabularDataSearch.utils.DocumentUtils;
+import com.michael.tabularDataSearch.utils.SchemaDescriptions;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -36,6 +37,7 @@ public class RagDemoController {
     private final ProductService productService;
 
     @GetMapping("/chatWithRag")
+    // Demo: baseline RAG chat that augments the prompt with similar documents from the vector store
     public String chatWithRag(@RequestParam(value = "message") String message) {
         try {
             QuestionAnswerAdvisor qaAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
@@ -58,6 +60,7 @@ public class RagDemoController {
     }
 
     @GetMapping("/chatWithRagAndTool")
+    // Demo: RAG + function calling – the model can call ProductTools to fetch relational data
     public String chatWithRagAndToolCalling(@RequestParam(value = "message") String message) {
         try {
             return chatClient.prompt()
@@ -71,11 +74,13 @@ public class RagDemoController {
     }
 
     @GetMapping("/search-product")
+    // Demo: semantic lookup of nearby product names stored as embeddings in the vector store
     public List<ProductDetails> searchProduct(@RequestParam("name") String name) {
         return productTools.findClosestProducts(name, 3);
     }
 
     @GetMapping("/ask-product-question")
+    // Demo: tabular grounding – the LLM receives product rows as context to answer catalog questions
     public String askProductQuestion(@RequestParam("question") String question) {
         List<ProductDetails> products = productTools.findClosestProducts(question, 20);
 
@@ -97,7 +102,35 @@ public class RagDemoController {
                 .content();
     }
 
+    @GetMapping("/text-to-sql")
+    // Demo: text-to-SQL pipeline – generate SQL from a natural-language ask and summarize the result
+    public ResponseEntity<String> textToSql(@RequestParam("question") String question) {
+        try {
+            String schema = SchemaDescriptions.TABULAR_RAG_SCHEMA;
+
+            String sql = chatClient.prompt()
+                    .user("Generate a safe SQL query for this schema and question. " +
+                            "Return ONLY the SQL. Schema: " + schema + " Question: " + question)
+                    .call()
+                    .content()
+                    .trim();
+
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
+
+            String resultSummary = chatClient.prompt()
+                    .user("Question: " + question + "\nSQL: " + sql + "\nRows: " + rows)
+                    .call()
+                    .content();
+
+            return ResponseEntity.ok(resultSummary);
+        } catch (Exception e) {
+            log.error("Text-to-SQL pipeline failed", e);
+            return ResponseEntity.badRequest().body("Unable to answer with text-to-SQL: " + e.getMessage());
+        }
+    }
+
     @GetMapping("/search-document")
+    // Demo: similarity search over unstructured documents stored in the vector store
     public List<DocumentSearchResult> searchDocument(@RequestBody DocumentRequest request) {
         List<Document> similarDocuments = vectorStore.similaritySearch(SearchRequest.builder()
                 .query(request.content())
@@ -114,6 +147,7 @@ public class RagDemoController {
     }
 
     @PostMapping("/add-document")
+    // Demo: push raw text snippets into the vector store for later retrieval
     public void addDocumentToVectorStore(@RequestBody DocumentRequest request) {
         Document document = new Document(request.content());
 
@@ -123,6 +157,7 @@ public class RagDemoController {
     }
 
     @PostMapping("/upload-csv-file")
+    // Demo: ingest structured CSV rows, chunk them, and embed into the vector store
     public ResponseEntity<String> uploadCsvFile(@RequestParam("file") MultipartFile file) throws IOException {
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body("Please upload a file");
@@ -137,6 +172,7 @@ public class RagDemoController {
     }
 
     @PostMapping("/upload-text-file")
+    // Demo: ingest a plain text file, chunk it, embed it, and store for RAG
     public ResponseEntity<String> uploadTextFile(@RequestParam("file") MultipartFile file)
             throws IOException {
         String content = new String(file.getBytes(), StandardCharsets.UTF_8);
@@ -153,6 +189,7 @@ public class RagDemoController {
     }
 
     @PostMapping("/add-products-to-vector-store")
+    // Demo: vectorize relational rows (products) so they can participate in semantic search
     public ResponseEntity<String> addProductsToVectorStore() {
         List<Product> products = productService.findAllProducts();
 
@@ -167,6 +204,7 @@ public class RagDemoController {
     }
 
     @PostMapping("/add-default-documents")
+    // Demo: bootstrap vector store with toy facts for a quick RAG walkthrough
     public void addDefaultDocumentToVectorStore() {
         List<String> facts = List.of(
                 "Albert Einstein was a physicist known for the theory of relativity.",
@@ -193,6 +231,7 @@ public class RagDemoController {
     }
 
     @DeleteMapping("/delete-all-documents")
+    // Demo: clear the vector store between scenarios to keep your talk deterministic
     public ResponseEntity<String> deleteAllDocuments() {
         jdbcTemplate.execute("DELETE FROM vector_store");
 
