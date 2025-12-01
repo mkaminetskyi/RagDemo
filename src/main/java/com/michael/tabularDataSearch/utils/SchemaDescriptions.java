@@ -7,12 +7,12 @@ public class SchemaDescriptions {
 
     public static final String TABULAR_RAG_SCHEMA = """
 Tables:
-  products(id INT, name VARCHAR, description TEXT, price DECIMAL, quantity INT, category_id INT, supplier_id INT)
-  product_categories(id INT, name VARCHAR, description TEXT)
-  suppliers(id INT, name VARCHAR, contact_email VARCHAR, reliability_score INT)
-  customers(id INT, name VARCHAR, email VARCHAR, loyalty_tier VARCHAR)
-  purchase_orders(id INT, customer_id INT, status VARCHAR, reference VARCHAR)
-  purchase_order_lines(id INT, order_id INT, product_id INT, quantity INT, unit_price INT)
+  product_categories(id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT) -- examples: 'Електроніка', 'Дім і кухня', 'Офіс і навчання'
+  suppliers(id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, contact_email VARCHAR(255), reliability_score INTEGER NOT NULL) -- examples: 'СвітТех Поставка' (92), 'Балтія Логістик' (88)
+  products(id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, price INTEGER NOT NULL, quantity INTEGER NOT NULL, category_id INTEGER REFERENCES product_categories(id), supplier_id INTEGER REFERENCES suppliers(id)) -- examples: 'Бездротова миша' (1299 UAH, qty 140), 'Настільна лампа з Qi зарядкою' (1890 UAH, qty 75)
+  customers(id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, email VARCHAR(255), loyalty_tier VARCHAR(50)) -- examples: 'Олена Коваль' (Gold), 'Ігор Мельник' (Silver)
+  purchase_orders(id SERIAL PRIMARY KEY, customer_id INTEGER REFERENCES customers(id), status VARCHAR(50), reference VARCHAR(100)) -- examples: reference 'PO-2024-001' (submitted), 'PO-2024-002' (processing)
+  purchase_order_lines(id SERIAL PRIMARY KEY, order_id INTEGER REFERENCES purchase_orders(id), product_id INTEGER REFERENCES products(id), quantity INTEGER NOT NULL, unit_price INTEGER NOT NULL) -- uses same currency as products.price
 Relationships:
   products.category_id -> product_categories.id
   products.supplier_id -> suppliers.id

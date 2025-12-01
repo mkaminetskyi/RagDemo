@@ -23,6 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -114,6 +115,15 @@ public class RagDemoController {
                     .call()
                     .content()
                     .trim();
+
+            sql = stripCodeFences(sql);
+
+            if (!isSelectQuery(sql)) {
+                log.warn("Rejected unsafe SQL from model: {}", sql);
+                return ResponseEntity.badRequest().body("Generated SQL is not a safe SELECT query: " + sql);
+            }
+
+            log.info("Executing generated SQL: {}", sql);
 
             List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
 
@@ -238,5 +248,44 @@ public class RagDemoController {
         log.info("All documents deleted from vector store");
 
         return ResponseEntity.ok("All documents deleted");
+    }
+
+    private String stripCodeFences(String sqlResponse) {
+        String cleaned = sqlResponse.trim();
+
+        if (cleaned.startsWith("```")) {
+            cleaned = cleaned.replaceFirst("```sql\\s*", "");
+            cleaned = cleaned.replaceFirst("^```", "");
+            int closingFenceIndex = cleaned.indexOf("```");
+            if (closingFenceIndex >= 0) {
+                cleaned = cleaned.substring(0, closingFenceIndex);
+            }
+        }
+
+        if (cleaned.endsWith(";")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 1);
+        }
+
+        return cleaned.trim();
+    }
+
+    private boolean isSelectQuery(String sql) {
+        String normalized = sql.trim();
+        String lowerCaseSql = normalized.toLowerCase(Locale.ROOT);
+
+        if (!lowerCaseSql.startsWith("select")) {
+            return false;
+        }
+
+        List<String> forbiddenKeywords = List.of(
+                "insert ", "update ", "delete ", "drop ", "alter ", "truncate ", "create ", " grant ", " revoke ");
+
+        for (String keyword : forbiddenKeywords) {
+            if (lowerCaseSql.contains(keyword)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
