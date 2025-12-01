@@ -27,7 +27,13 @@ spring:
         initialize-schema: true
         dimensions: 1536
         index-type: hnsw
-        table-name: database_vectors
+        table-name: embeddings
+
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
 
 ai:
   models:

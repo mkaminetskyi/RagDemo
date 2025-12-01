@@ -4,9 +4,9 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class SemanticSearchDemoApplication {
+public class TabularDataSearchDemoApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(SemanticSearchDemoApplication.class, args);
+        SpringApplication.run(TabularDataSearchDemoApplication.class, args);
     }
 }
