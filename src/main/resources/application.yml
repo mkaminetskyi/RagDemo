@@ -8,7 +8,9 @@ spring:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     open-in-view: false
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
+  flyway:
+    locations: classpath:db/migration
   ai:
     openai:
       api-key: ${AI_OPENAI_API_KEY}
@@ -28,6 +30,4 @@ spring:
 
   sql:
     init:
-      mode: always
-      schema-locations: classpath:schema.sql
-      data-locations: classpath:data.sql
+      mode: never
