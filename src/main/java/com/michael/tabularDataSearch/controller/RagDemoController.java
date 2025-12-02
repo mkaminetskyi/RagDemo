@@ -4,8 +4,15 @@ import com.michael.tabularDataSearch.dto.DocumentRequest;
 import com.michael.tabularDataSearch.dto.DocumentSearchResult;
 import com.michael.tabularDataSearch.dto.ProductDetails;
 import com.michael.tabularDataSearch.entity.Product;
+import com.michael.tabularDataSearch.repository.CustomerRepository;
+import com.michael.tabularDataSearch.repository.ProductCategoryRepository;
+import com.michael.tabularDataSearch.repository.PurchaseOrderLineRepository;
+import com.michael.tabularDataSearch.repository.PurchaseOrderRepository;
+import com.michael.tabularDataSearch.repository.SupplierRepository;
 import com.michael.tabularDataSearch.service.ProductService;
 import com.michael.tabularDataSearch.service.ProductTools;
+import com.michael.tabularDataSearch.utils.DatabaseSnapshotFormatter;
+import com.michael.tabularDataSearch.utils.DocumentUtils;
 import com.michael.tabularDataSearch.utils.SchemaDescriptions;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +29,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @RestController
@@ -32,6 +40,11 @@ public class RagDemoController {
     private final ChatClient chatClient;
     private final ProductTools productTools;
     private final ProductService productService;
+    private final ProductCategoryRepository productCategoryRepository;
+    private final SupplierRepository supplierRepository;
+    private final CustomerRepository customerRepository;
+    private final PurchaseOrderRepository purchaseOrderRepository;
+    private final PurchaseOrderLineRepository purchaseOrderLineRepository;
 
     @GetMapping("/chatWithRag")
     public String chatWithRag(@RequestParam(value = "question") String question) {
@@ -103,7 +116,6 @@ public class RagDemoController {
         }
     }
 
-
     @GetMapping("/search-product")
     public List<ProductDetails> searchProduct(@RequestParam("name") String name) {
         return productTools.findClosestProducts(name, 3);
@@ -161,6 +173,37 @@ public class RagDemoController {
                 documents.size() + " products");
     }
 
+    @PostMapping("/add-database-info-to-vector-store")
+    public ResponseEntity<String> addDatabaseInfoToVectorStore() {
+        StringBuilder snapshotBuilder = new StringBuilder();
+
+        DatabaseSnapshotFormatter.appendCategories(snapshotBuilder, productCategoryRepository.findAll());
+        DatabaseSnapshotFormatter.appendSuppliers(snapshotBuilder, supplierRepository.findAll());
+        DatabaseSnapshotFormatter.appendProducts(snapshotBuilder, productService.findAllProducts());
+        DatabaseSnapshotFormatter.appendCustomers(snapshotBuilder, customerRepository.findAll());
+        DatabaseSnapshotFormatter.appendPurchaseOrders(snapshotBuilder, purchaseOrderRepository.findAll());
+        DatabaseSnapshotFormatter.appendPurchaseOrderLines(snapshotBuilder, purchaseOrderLineRepository.findAll());
+
+        String snapshot = snapshotBuilder.toString().trim();
+
+        if (snapshot.isEmpty()) {
+            return ResponseEntity.badRequest().body("No database content found to embed");
+        }
+
+        List<String> chunks = DocumentUtils.splitIntoChunks(snapshot, 50);
+
+        AtomicInteger index = new AtomicInteger(1);
+        List<Document> documents = chunks.stream()
+                .map(chunk -> new Document(chunk, Map.of(
+                        "source", "database",
+                        "chunkIndex", index.getAndIncrement())))
+                .toList();
+
+        vectorStore.add(documents);
+
+        return ResponseEntity.ok("Embedded " + documents.size() + " database chunks into the vector store");
+    }
+
     @DeleteMapping("/delete-all-embeddings")
     public ResponseEntity<String> deleteAllEmbeddings() {
         jdbcTemplate.execute("DELETE FROM embeddings");
@@ -209,4 +252,5 @@ public class RagDemoController {
 
         return true;
     }
+
 }
