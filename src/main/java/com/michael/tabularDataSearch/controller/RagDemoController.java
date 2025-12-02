@@ -232,7 +232,6 @@ public class RagDemoController {
         return cleaned.trim();
     }
 
-    // User with read only rights should be created
     private boolean isSelectQuery(String sql) {
         String normalized = sql.trim();
         String lowerCaseSql = normalized.toLowerCase(Locale.ROOT);
@@ -252,5 +251,4 @@ public class RagDemoController {
 
         return true;
     }
-
 }
