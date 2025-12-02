@@ -25,7 +25,6 @@ public class PurchaseOrder {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private int id;
 
-    private String reference;
     private String status;
 
     @ManyToOne

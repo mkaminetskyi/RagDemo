@@ -6,7 +6,6 @@ import com.michael.tabularDataSearch.dto.ProductDetails;
 import com.michael.tabularDataSearch.entity.Product;
 import com.michael.tabularDataSearch.service.ProductService;
 import com.michael.tabularDataSearch.service.ProductTools;
-import com.michael.tabularDataSearch.utils.DocumentUtils;
 import com.michael.tabularDataSearch.utils.SchemaDescriptions;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,10 +17,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -38,12 +34,12 @@ public class RagDemoController {
     private final ProductService productService;
 
     @GetMapping("/chatWithRag")
-    public String chatWithRag(@RequestParam(value = "message") String message) {
+    public String chatWithRag(@RequestParam(value = "question") String question) {
         try {
             QuestionAnswerAdvisor qaAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
                     .searchRequest(
                             SearchRequest.builder()
-                                   // .similarityThreshold(0.8d)
+                                    // .similarityThreshold(0.8d)
                                     .topK(10)
                                     .build()
                     )
@@ -51,7 +47,7 @@ public class RagDemoController {
 
             return chatClient.prompt()
                     .advisors(qaAdvisor)
-                    .user(message)
+                    .user(question)
                     .call()
                     .content();
         } catch (Exception e) {
@@ -60,11 +56,11 @@ public class RagDemoController {
     }
 
     @GetMapping("/chatWithRagAndTool")
-    public String chatWithRagAndToolCalling(@RequestParam(value = "message") String message) {
+    public String chatWithRagAndToolCalling(@RequestParam(value = "question") String question) {
         try {
             return chatClient.prompt()
                     .tools(productTools)
-                    .user(message)
+                    .user(question)
                     .call()
                     .content();
         } catch (Exception e) {

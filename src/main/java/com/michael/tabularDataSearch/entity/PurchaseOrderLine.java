@@ -31,5 +31,4 @@ public class PurchaseOrderLine {
     private Product product;
 
     private int quantity;
-    private int unitPrice;
 }

@@ -50,16 +50,22 @@ INSERT INTO customers (name, email, loyalty_tier) VALUES
   ('Ігор Мельник', 'ihor.melnyk@example.com', 'Silver'),
   ('Марія Ткач', 'maria.tkach@example.com', 'Bronze');
 
-INSERT INTO purchase_orders (customer_id, status, reference) VALUES
-  ((SELECT id FROM customers WHERE name = 'Олена Коваль'), 'submitted', 'PO-2024-001'),
-  ((SELECT id FROM customers WHERE name = 'Ігор Мельник'), 'processing', 'PO-2024-002');
-
-INSERT INTO purchase_order_lines (order_id, product_id, quantity, unit_price) VALUES
-  ((SELECT id FROM purchase_orders WHERE reference = 'PO-2024-001'),
-   (SELECT id FROM products WHERE name = 'Бездротова миша'), 3, 1250),
-  ((SELECT id FROM purchase_orders WHERE reference = 'PO-2024-001'),
-   (SELECT id FROM products WHERE name = 'Настільна лампа з Qi зарядкою'), 2, 1850),
-  ((SELECT id FROM purchase_orders WHERE reference = 'PO-2024-002'),
-   (SELECT id FROM products WHERE name = 'Компресор автомобільний'), 4, 2100),
-  ((SELECT id FROM purchase_orders WHERE reference = 'PO-2024-002'),
-   (SELECT id FROM products WHERE name = 'Намет на 3 особи'), 1, 5050);
+WITH first_order AS (
+  INSERT INTO purchase_orders (customer_id, status)
+  VALUES ((SELECT id FROM customers WHERE name = 'Олена Коваль'), 'submitted')
+  RETURNING id
+),
+second_order AS (
+  INSERT INTO purchase_orders (customer_id, status)
+  VALUES ((SELECT id FROM customers WHERE name = 'Ігор Мельник'), 'processing')
+  RETURNING id
+)
+INSERT INTO purchase_order_lines (order_id, product_id, quantity) VALUES
+  ((SELECT id FROM first_order),
+   (SELECT id FROM products WHERE name = 'Бездротова миша'), 3),
+  ((SELECT id FROM first_order),
+   (SELECT id FROM products WHERE name = 'Настільна лампа з Qi зарядкою'), 2),
+  ((SELECT id FROM second_order),
+   (SELECT id FROM products WHERE name = 'Компресор автомобільний'), 4),
+  ((SELECT id FROM second_order),
+   (SELECT id FROM products WHERE name = 'Намет на 3 особи'), 1);
