@@ -1,8 +1,13 @@
 package com.michael.tabularDataSearch.service;
 
-import com.michael.tabularDataSearch.dto.ProductDetails;
 import com.michael.tabularDataSearch.dto.InventorySummary;
+import com.michael.tabularDataSearch.dto.ProductDetails;
+import com.michael.tabularDataSearch.entity.Customer;
 import com.michael.tabularDataSearch.entity.Product;
+import com.michael.tabularDataSearch.entity.PurchaseOrder;
+import com.michael.tabularDataSearch.entity.PurchaseOrderLine;
+import com.michael.tabularDataSearch.repository.CustomerRepository;
+import com.michael.tabularDataSearch.repository.PurchaseOrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
@@ -21,6 +26,8 @@ import java.util.Optional;
 public class ProductTools {
     private final ProductService productService;
     private final VectorStore vectorStore;
+    private final CustomerRepository customerRepository;
+    private final PurchaseOrderRepository purchaseOrderRepository;
 
     @Tool(description = "Get Product details by name")
     public ProductDetails getProductDetails(String productName) {
@@ -88,6 +95,34 @@ public class ProductTools {
         log.info("Summarizing inventory by category");
 
         return productService.summarizeInventoryByCategory();
+    }
+
+    @Tool(description = "Create a purchase order for a customer with a single product line")
+    public PurchaseOrder createOrder(int customerId, int productId, int quantity) {
+        log.info("Creating order for customer {} with product {} x{}", customerId, productId, quantity);
+
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than zero");
+        }
+
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + customerId));
+
+        Product product = Optional.ofNullable(productService.findProductById(productId))
+                .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
+
+        PurchaseOrder order = new PurchaseOrder();
+        order.setCustomer(customer);
+        order.setStatus("NEW");
+
+        PurchaseOrderLine line = new PurchaseOrderLine();
+        line.setOrder(order);
+        line.setProduct(product);
+        line.setQuantity(quantity);
+
+        order.getLineItems().add(line);
+
+        return purchaseOrderRepository.save(order);
     }
 
     private ProductDetails toProductDetails(Product product) {

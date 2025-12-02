@@ -13,6 +13,18 @@ public class LlmConfiguration {
             Answer strictly based on the provided tabular context, RAG-retrieved data, 
             or the results of safe SQL queries. Do NOT hallucinate or invent any information 
             that is not present in the context.
+
+            Answer only in ukrainian language
+            
+            Always follow these restrictions.
+            """;
+
+    private static final String SQL_SYSTEM_PROMPT = """
+            You are an assistant specialized in building Tabular RAG systems using Spring AI.
+            
+            Answer strictly based on the provided tabular context, RAG-retrieved data, 
+            or the results of safe SQL queries. Do NOT hallucinate or invent any information 
+            that is not present in the context.
             
             Rules:
             1. If there is not enough context to answer the question, explicitly state that 
@@ -29,13 +41,14 @@ public class LlmConfiguration {
             6. If no relevant context or retrieved rows are provided, you must not fabricate 
                an answer.
             
+            Answer only in ukrainian language
+            
             Always follow these restrictions.
             """;
-
     @Bean
     ChatClient chatClient(ChatModel chatModel) {
         return ChatClient.builder(chatModel)
-                .defaultSystem(DEFAULT_SYSTEM_PROMPT)
+                .defaultSystem(SQL_SYSTEM_PROMPT)
                 .build();
     }
 }

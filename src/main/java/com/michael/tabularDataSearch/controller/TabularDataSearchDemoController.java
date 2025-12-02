@@ -1,8 +1,5 @@
 package com.michael.tabularDataSearch.controller;
 
-import com.michael.tabularDataSearch.dto.DocumentRequest;
-import com.michael.tabularDataSearch.dto.DocumentSearchResult;
-import com.michael.tabularDataSearch.dto.ProductDetails;
 import com.michael.tabularDataSearch.entity.Product;
 import com.michael.tabularDataSearch.repository.CustomerRepository;
 import com.michael.tabularDataSearch.repository.ProductCategoryRepository;
@@ -28,13 +25,12 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @RestController
 @AllArgsConstructor
-public class RagDemoController {
+public class TabularDataSearchDemoController {
     private final JdbcTemplate jdbcTemplate;
     private final VectorStore vectorStore;
     private final ChatClient chatClient;
@@ -46,14 +42,13 @@ public class RagDemoController {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderLineRepository purchaseOrderLineRepository;
 
-    @GetMapping("/chatWithRag")
+    @GetMapping("/chat/rag")
     public String chatWithRag(@RequestParam(value = "question") String question) {
         try {
             QuestionAnswerAdvisor qaAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
                     .searchRequest(
                             SearchRequest.builder()
-                                    // .similarityThreshold(0.8d)
-                                    .topK(10)
+                                    .topK(20)
                                     .build()
                     )
                     .build();
@@ -68,20 +63,7 @@ public class RagDemoController {
         }
     }
 
-    @GetMapping("/chatWithRagAndTool")
-    public String chatWithRagAndToolCalling(@RequestParam(value = "question") String question) {
-        try {
-            return chatClient.prompt()
-                    .tools(productTools)
-                    .user(question)
-                    .call()
-                    .content();
-        } catch (Exception e) {
-            return e.getMessage();
-        }
-    }
-
-    @GetMapping("/text-to-sql")
+    @GetMapping("/chat/text-to-sql")
     public ResponseEntity<String> textToSql(@RequestParam("question") String question) {
         try {
             String schema = SchemaDescriptions.TABULAR_RAG_SCHEMA;
@@ -112,51 +94,22 @@ public class RagDemoController {
             return ResponseEntity.ok(resultSummary);
         } catch (Exception e) {
             log.error("Text-to-SQL pipeline failed", e);
+
             return ResponseEntity.badRequest().body("Unable to answer with text-to-SQL: " + e.getMessage());
         }
     }
 
-    @GetMapping("/search-product")
-    public List<ProductDetails> searchProduct(@RequestParam("name") String name) {
-        return productTools.findClosestProducts(name, 3);
-    }
-
-    @GetMapping("/ask-product-question")
-    public String askProductQuestion(@RequestParam("question") String question) {
-        List<ProductDetails> products = productTools.findClosestProducts(question, 20);
-
-        StringBuilder promptBuilder = new StringBuilder("Product Info:\n");
-        for (ProductDetails product : products) {
-            promptBuilder.append("Name: ")
-                    .append(product.name())
-                    .append(", Price: ")
-                    .append(product.price())
-                    .append(", Quantity: ")
-                    .append(product.quantity())
-                    .append("\n");
+    @GetMapping("/chat/rag-and-tool")
+    public String chatWithRagAndToolCalling(@RequestParam(value = "question") String question) {
+        try {
+            return chatClient.prompt()
+                    .tools(productTools)
+                    .user(question)
+                    .call()
+                    .content();
+        } catch (Exception e) {
+            return e.getMessage();
         }
-        promptBuilder.append("\n").append(question);
-
-        return chatClient.prompt()
-                .user(promptBuilder.toString())
-                .call()
-                .content();
-    }
-
-    @GetMapping("/search-document")
-    public List<DocumentSearchResult> searchDocument(@RequestBody DocumentRequest request) {
-        List<Document> similarDocuments = vectorStore.similaritySearch(SearchRequest.builder()
-                .query(request.content())
-                .topK(3)
-                .build());
-
-        return Optional.ofNullable(similarDocuments)
-                .orElse(List.of())
-                .stream()
-                .map(doc -> new
-                        DocumentSearchResult(doc.getText(),
-                        doc.getScore()))
-                .toList();
     }
 
     @PostMapping("/add-products-to-vector-store")
