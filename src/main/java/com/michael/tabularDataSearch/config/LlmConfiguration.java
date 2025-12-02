@@ -48,7 +48,7 @@ public class LlmConfiguration {
     @Bean
     ChatClient chatClient(ChatModel chatModel) {
         return ChatClient.builder(chatModel)
-                .defaultSystem(SQL_SYSTEM_PROMPT)
+                .defaultSystem(DEFAULT_SYSTEM_PROMPT)
                 .build();
     }
 }

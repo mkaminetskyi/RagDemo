@@ -1,15 +1,8 @@
 package com.michael.tabularDataSearch.controller;
 
 import com.michael.tabularDataSearch.entity.Product;
-import com.michael.tabularDataSearch.repository.CustomerRepository;
-import com.michael.tabularDataSearch.repository.ProductCategoryRepository;
-import com.michael.tabularDataSearch.repository.PurchaseOrderLineRepository;
-import com.michael.tabularDataSearch.repository.PurchaseOrderRepository;
-import com.michael.tabularDataSearch.repository.SupplierRepository;
 import com.michael.tabularDataSearch.service.ProductService;
 import com.michael.tabularDataSearch.service.ProductTools;
-import com.michael.tabularDataSearch.utils.DatabaseSnapshotFormatter;
-import com.michael.tabularDataSearch.utils.DocumentUtils;
 import com.michael.tabularDataSearch.utils.SchemaDescriptions;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,8 +13,12 @@ import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -36,11 +33,6 @@ public class TabularDataSearchDemoController {
     private final ChatClient chatClient;
     private final ProductTools productTools;
     private final ProductService productService;
-    private final ProductCategoryRepository productCategoryRepository;
-    private final SupplierRepository supplierRepository;
-    private final CustomerRepository customerRepository;
-    private final PurchaseOrderRepository purchaseOrderRepository;
-    private final PurchaseOrderLineRepository purchaseOrderLineRepository;
 
     @GetMapping("/chat/rag")
     public String chatWithRag(@RequestParam(value = "question") String question) {
@@ -128,33 +120,34 @@ public class TabularDataSearchDemoController {
 
     @PostMapping("/add-database-info-to-vector-store")
     public ResponseEntity<String> addDatabaseInfoToVectorStore() {
-        StringBuilder snapshotBuilder = new StringBuilder();
+        try {
+            ClassPathResource resource = new ClassPathResource("database-content.txt");
+            String snapshot;
 
-        DatabaseSnapshotFormatter.appendCategories(snapshotBuilder, productCategoryRepository.findAll());
-        DatabaseSnapshotFormatter.appendSuppliers(snapshotBuilder, supplierRepository.findAll());
-        DatabaseSnapshotFormatter.appendProducts(snapshotBuilder, productService.findAllProducts());
-        DatabaseSnapshotFormatter.appendCustomers(snapshotBuilder, customerRepository.findAll());
-        DatabaseSnapshotFormatter.appendPurchaseOrders(snapshotBuilder, purchaseOrderRepository.findAll());
-        DatabaseSnapshotFormatter.appendPurchaseOrderLines(snapshotBuilder, purchaseOrderLineRepository.findAll());
+            try (var inputStream = resource.getInputStream()) {
+                snapshot = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8).trim();
+            }
 
-        String snapshot = snapshotBuilder.toString().trim();
+            if (snapshot.isEmpty()) {
+                return ResponseEntity.badRequest().body("No database content found to embed");
+            }
 
-        if (snapshot.isEmpty()) {
-            return ResponseEntity.badRequest().body("No database content found to embed");
+            List<String> chunks = splitByCharacters(snapshot, 50);
+
+            AtomicInteger index = new AtomicInteger(1);
+            List<Document> documents = chunks.stream()
+                    .map(chunk -> new Document(chunk, Map.of(
+                            "source", "database",
+                            "chunkIndex", index.getAndIncrement())))
+                    .toList();
+
+            vectorStore.add(documents);
+
+            return ResponseEntity.ok("Embedded " + documents.size() + " database chunks into the vector store");
+        } catch (IOException e) {
+            log.error("Failed to read database content file", e);
+            return ResponseEntity.internalServerError().body("Failed to read database content file: " + e.getMessage());
         }
-
-        List<String> chunks = DocumentUtils.splitIntoChunks(snapshot, 50);
-
-        AtomicInteger index = new AtomicInteger(1);
-        List<Document> documents = chunks.stream()
-                .map(chunk -> new Document(chunk, Map.of(
-                        "source", "database",
-                        "chunkIndex", index.getAndIncrement())))
-                .toList();
-
-        vectorStore.add(documents);
-
-        return ResponseEntity.ok("Embedded " + documents.size() + " database chunks into the vector store");
     }
 
     @DeleteMapping("/delete-all-embeddings")
@@ -203,5 +196,20 @@ public class TabularDataSearchDemoController {
         }
 
         return true;
+    }
+
+    private List<String> splitByCharacters(String content, int chunkSize) {
+        List<String> chunks = new ArrayList<>();
+
+        for (int i = 0; i < content.length(); i += chunkSize) {
+            int endIndex = Math.min(content.length(), i + chunkSize);
+            String chunk = content.substring(i, endIndex);
+
+            if (!chunk.trim().isEmpty()) {
+                chunks.add(chunk);
+            }
+        }
+
+        return chunks;
     }
 }
