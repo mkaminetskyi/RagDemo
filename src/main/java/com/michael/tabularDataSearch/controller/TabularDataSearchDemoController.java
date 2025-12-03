@@ -110,6 +110,31 @@ public class TabularDataSearchDemoController {
         String schema = SchemaDescriptions.TABULAR_RAG_SCHEMA;
 
         String sql = Objects.requireNonNull(chatClient.prompt()
+                        .user("Generate a SQL query for this schema and question. " +
+                                "Return ONLY the SQL. Schema: " + schema + " Question: " + question)
+                        .call()
+                        .content())
+                .trim();
+
+        sql = stripCodeFences(sql);
+
+        log.info("Executing generated SQL: {}", sql);
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
+
+        String resultSummary = chatClient.prompt()
+                .user("Question: " + question + "\nSQL: " + sql + "\nRows: " + rows)
+                .call()
+                .content();
+
+        return ResponseEntity.ok(resultSummary);
+    }
+
+    @GetMapping("/chat/text-to-sql-safe")
+    public ResponseEntity<String> textToSqlSafe(@RequestParam("question") String question) {
+        String schema = SchemaDescriptions.TABULAR_RAG_SCHEMA;
+
+        String sql = Objects.requireNonNull(chatClient.prompt()
                         .user("Generate a safe SQL query for this schema and question. " +
                                 "Return ONLY the SQL. Schema: " + schema + " Question: " + question)
                         .call()
@@ -121,10 +146,10 @@ public class TabularDataSearchDemoController {
         if (!isSelectQuery(sql)) {
             log.warn("Rejected unsafe SQL from model: {}", sql);
 
-            return ResponseEntity.badRequest().body("Generated SQL is not a safe SELECT query: " + sql);
+            return ResponseEntity.badRequest().body("Generated SQL is not a safe");
         }
 
-        log.info("Executing generated SQL: {}", sql);
+        log.info("Executing generated safe SQL: {}", sql);
 
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
 
@@ -137,7 +162,7 @@ public class TabularDataSearchDemoController {
         return ResponseEntity.ok(resultSummary);
     }
 
-    @GetMapping("/chat/rag-and-tool")
+    @GetMapping("/chat/tool-calling")
     public String chatWithRagAndToolCalling(@RequestParam(value = "question") String question) {
         try {
             return chatClient.prompt()
