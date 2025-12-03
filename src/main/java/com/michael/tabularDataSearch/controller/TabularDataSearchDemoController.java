@@ -130,6 +130,7 @@ public class TabularDataSearchDemoController {
 
         String resultSummary = chatClient.prompt()
                 .user("Question: " + question + "\nSQL: " + sql + "\nRows: " + rows)
+                .system(SQL_SYSTEM_PROMPT)
                 .call()
                 .content();
 
