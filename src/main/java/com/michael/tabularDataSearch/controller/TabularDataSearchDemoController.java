@@ -111,24 +111,36 @@ public class TabularDataSearchDemoController {
 
         String sql = Objects.requireNonNull(chatClient.prompt()
                         .user("Generate a SQL query for this schema and question. " +
-                                "Return ONLY the SQL. Schema: " + schema + " Question: " + question)
+                                "Return ONLY the SQL. Answer in Ukrainian. Schema: " + schema + " Question: " + question)
                         .call()
                         .content())
                 .trim();
 
         sql = stripCodeFences(sql);
+        String lower = sql.stripLeading().toLowerCase(Locale.ROOT);
 
-        log.info("Executing generated SQL: {}", sql);
+        String llmInput;
+        if (lower.startsWith("select")) {
+            log.info("Executing generated SELECT SQL: {}", sql);
 
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
+            llmInput = "Question: " + question + "\nSQL: " + sql + "\nRows: " + rows;
+        } else {
+            log.warn("Executing NON-SELECT SQL from LLM (unsafe demo): {}", sql);
+
+            jdbcTemplate.execute(sql);
+            llmInput = "Question: " + question + "\nSQL: " + sql +
+                    "\nNote: Non-SELECT SQL was executed against the database.";
+        }
 
         String resultSummary = chatClient.prompt()
-                .user("Question: " + question + "\nSQL: " + sql + "\nRows: " + rows)
+                .user(llmInput)
                 .call()
                 .content();
 
         return ResponseEntity.ok(resultSummary);
     }
+
 
     @GetMapping("/chat/text-to-sql-safe")
     public ResponseEntity<String> textToSqlSafe(@RequestParam("question") String question) {
