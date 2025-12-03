@@ -90,6 +90,14 @@ public class ProductTools {
                 .toList();
     }
 
+    @Tool(description = "Update the price of a product by its ID")
+    public ProductDetails updateProductPrice(int productId, int newPrice) {
+        log.info("Updating price for product {} to {}", productId, newPrice);
+
+        Product updatedProduct = productService.updateProductPrice(productId, newPrice);
+        return toProductDetails(updatedProduct);
+    }
+
     @Tool(description = "Summarize inventory by category with totals and averages")
     public List<InventorySummary> summarizeInventory() {
         log.info("Summarizing inventory by category");

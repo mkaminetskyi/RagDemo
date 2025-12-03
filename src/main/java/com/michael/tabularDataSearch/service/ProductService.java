@@ -42,4 +42,16 @@ public class ProductService {
     public List<InventorySummary> summarizeInventoryByCategory() {
         return productRepository.summarizeInventoryByCategory();
     }
+
+    public Product updateProductPrice(int productId, int newPrice) {
+        if (newPrice < 0) {
+            throw new IllegalArgumentException("Price must be non-negative");
+        }
+
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
+
+        product.setPrice(newPrice);
+        return productRepository.save(product);
+    }
 }
