@@ -7,27 +7,62 @@ import com.michael.tabularDataSearch.utils.SchemaDescriptions;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.QuestionAnswerAdvisor;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
 @AllArgsConstructor
 public class TabularDataSearchDemoController {
+    private static final String RAG_SYSTEM_MESSAGE = """
+            You are an assistant specialized in answering about data in database
+            
+            Answer strictly based on the provided tabular context, RAG-retrieved data. 
+            Do NOT hallucinate or invent any information 
+            that is not present in the context.
+            
+            Answer only in ukrainian language
+            
+            Always follow these restrictions.
+            """;
+
+    private static final String SQL_SYSTEM_PROMPT = """
+            You are an assistant specialized in building Tabular RAG systems using Spring AI.
+            
+            Answer strictly based on the provided tabular context, RAG-retrieved data, 
+            or the results of safe SQL queries. Do NOT hallucinate or invent any information 
+            that is not present in the context.
+            
+            Rules:
+            1. If there is not enough context to answer the question, explicitly state that 
+               the information is insufficient.
+            2. You may generate only safe SQL queries using SELECT statements. Do NOT generate 
+               or suggest INSERT, UPDATE, DELETE, ALTER, DROP, CREATE, TRUNCATE, GRANT, REVOKE, 
+               or any statements that modify the database.
+            3. Never modify data, schema, or suggest any operations that could change the state 
+               of the database.
+            4. When generating SQL, limit queries to the available tables (e.g., products, 
+               product_categories, suppliers, product_sales).
+            5. All explanations must be grounded in structured tabular data, following 
+               Tabular RAG principles.
+            6. If no relevant context or retrieved rows are provided, you must not fabricate 
+               an answer.
+            
+            Answer only in ukrainian language
+            
+            Always follow these restrictions.
+            """;
+
     private final JdbcTemplate jdbcTemplate;
     private final VectorStore vectorStore;
     private final ChatClient chatClient;
@@ -35,60 +70,70 @@ public class TabularDataSearchDemoController {
     private final ProductService productService;
 
     @GetMapping("/chat/rag")
-    public String chatWithRag(@RequestParam(value = "question") String question) {
-        try {
-            QuestionAnswerAdvisor qaAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
-                    .searchRequest(
-                            SearchRequest.builder()
-                                    .topK(20)
-                                    .build()
-                    )
-                    .build();
+    public String chatWithRag(@RequestParam("question") String question) {
+        List<Document> documents = vectorStore.similaritySearch(
+                SearchRequest.builder()
+                        .query(question)
+                        .topK(10)
+                        .build()
+        );
 
-            return chatClient.prompt()
-                    .advisors(qaAdvisor)
-                    .user(question)
-                    .call()
-                    .content();
-        } catch (Exception e) {
-            return e.getMessage();
+        if (documents == null) {
+            documents = List.of();
         }
+
+        String context = documents.stream()
+                .map(Document::getFormattedContent)
+                .collect(Collectors.joining("\n\n---\n\n"));
+
+        String userMessage = """
+                You are answering using the following context.
+                
+                Context:
+                %s
+                
+                Question:
+                %s
+                """.formatted(context, question);
+
+        log.info("LLM user message: \n {}", userMessage);
+
+        return chatClient.prompt()
+                .system(RAG_SYSTEM_MESSAGE)
+                .user(userMessage)
+                .call()
+                .content();
     }
 
     @GetMapping("/chat/text-to-sql")
     public ResponseEntity<String> textToSql(@RequestParam("question") String question) {
-        try {
-            String schema = SchemaDescriptions.TABULAR_RAG_SCHEMA;
+        String schema = SchemaDescriptions.TABULAR_RAG_SCHEMA;
 
-            String sql = chatClient.prompt()
-                    .user("Generate a safe SQL query for this schema and question. " +
-                            "Return ONLY the SQL. Schema: " + schema + " Question: " + question)
-                    .call()
-                    .content()
-                    .trim();
+        String sql = Objects.requireNonNull(chatClient.prompt()
+                        .user("Generate a safe SQL query for this schema and question. " +
+                                "Return ONLY the SQL. Schema: " + schema + " Question: " + question)
+                        .call()
+                        .content())
+                .trim();
 
-            sql = stripCodeFences(sql);
+        sql = stripCodeFences(sql);
 
-            if (!isSelectQuery(sql)) {
-                log.warn("Rejected unsafe SQL from model: {}", sql);
-                return ResponseEntity.badRequest().body("Generated SQL is not a safe SELECT query: " + sql);
-            }
+        if (!isSelectQuery(sql)) {
+            log.warn("Rejected unsafe SQL from model: {}", sql);
 
-            log.info("Executing generated SQL: {}", sql);
-
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
-
-            String resultSummary = chatClient.prompt()
-                    .user("Question: " + question + "\nSQL: " + sql + "\nRows: " + rows)
-                    .call()
-                    .content();
-
-            return ResponseEntity.ok(resultSummary);
-        } catch (Exception e) {
-            log.error("Text-to-SQL pipeline failed", e);
-
-            return ResponseEntity.badRequest().body("Unable to answer with text-to-SQL: " + e.getMessage());
+            return ResponseEntity.badRequest().body("Generated SQL is not a safe SELECT query: " + sql);
         }
+
+        log.info("Executing generated SQL: {}", sql);
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
+
+        String resultSummary = chatClient.prompt()
+                .user("Question: " + question + "\nSQL: " + sql + "\nRows: " + rows)
+                .call()
+                .content();
+
+        return ResponseEntity.ok(resultSummary);
     }
 
     @GetMapping("/chat/rag-and-tool")
@@ -105,49 +150,20 @@ public class TabularDataSearchDemoController {
     }
 
     @PostMapping("/add-products-to-vector-store")
-    public ResponseEntity<String> addProductsToVectorStore() {
+    public ResponseEntity<String> addDatabaseInfoToVectorStore() {
         List<Product> products = productService.findAllProducts();
 
+        if (products.isEmpty()) {
+            return ResponseEntity.badRequest().body("No products found to embed");
+        }
+
         List<Document> documents = products.stream()
-                .map(p -> new Document(p.getName(), Map.of("productId", p.getId())))
+                .map(this::createProductDocument)
                 .toList();
 
         vectorStore.add(documents);
 
-        return ResponseEntity.ok("Successfully embedded and stored " +
-                documents.size() + " products");
-    }
-
-    @PostMapping("/add-database-info-to-vector-store")
-    public ResponseEntity<String> addDatabaseInfoToVectorStore() {
-        try {
-            ClassPathResource resource = new ClassPathResource("database-content.txt");
-            String snapshot;
-
-            try (var inputStream = resource.getInputStream()) {
-                snapshot = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8).trim();
-            }
-
-            if (snapshot.isEmpty()) {
-                return ResponseEntity.badRequest().body("No database content found to embed");
-            }
-
-            List<String> chunks = splitByCharacters(snapshot, 50);
-
-            AtomicInteger index = new AtomicInteger(1);
-            List<Document> documents = chunks.stream()
-                    .map(chunk -> new Document(chunk, Map.of(
-                            "source", "database",
-                            "chunkIndex", index.getAndIncrement())))
-                    .toList();
-
-            vectorStore.add(documents);
-
-            return ResponseEntity.ok("Embedded " + documents.size() + " database chunks into the vector store");
-        } catch (IOException e) {
-            log.error("Failed to read database content file", e);
-            return ResponseEntity.internalServerError().body("Failed to read database content file: " + e.getMessage());
-        }
+        return ResponseEntity.ok("Embedded " + documents.size() + " products into the vector store");
     }
 
     @DeleteMapping("/delete-all-embeddings")
@@ -198,18 +214,35 @@ public class TabularDataSearchDemoController {
         return true;
     }
 
-    private List<String> splitByCharacters(String content, int chunkSize) {
-        List<String> chunks = new ArrayList<>();
+    private Document createProductDocument(Product product) {
+        String content = """
+                Назва: %s
+                Категорія: %s
+                Постачальник: %s
+                Ціна: %d грн
+                Залишок: %d шт.
+                Опис: %s
+                """.formatted(
+                product.getName(),
+                product.getCategory().getName(),
+                product.getSupplier().getName(),
+                product.getPrice(),
+                product.getQuantity(),
+                product.getDescription());
 
-        for (int i = 0; i < content.length(); i += chunkSize) {
-            int endIndex = Math.min(content.length(), i + chunkSize);
-            String chunk = content.substring(i, endIndex);
-
-            if (!chunk.trim().isEmpty()) {
-                chunks.add(chunk);
-            }
-        }
-
-        return chunks;
+        return new Document(content.trim(), Map.of(
+                "productId", product.getId(),
+                "productName", product.getName(),
+                "category", product.getCategory().getName(),
+                "supplier", product.getSupplier().getName()));
     }
+
+    private String formatDocumentSource(Document document) {
+        String name = (String) document.getMetadata().getOrDefault("productName", "Невідомий товар");
+        String category = (String) document.getMetadata().getOrDefault("category", "-");
+        String supplier = (String) document.getMetadata().getOrDefault("supplier", "-");
+
+        return "%s (категорія: %s, постачальник: %s)".formatted(name, category, supplier);
+    }
+
 }
