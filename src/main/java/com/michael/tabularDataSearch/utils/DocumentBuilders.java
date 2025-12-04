@@ -1,17 +1,14 @@
 package com.michael.tabularDataSearch.utils;
 
-import com.michael.tabularDataSearch.entity.Customer;
-import com.michael.tabularDataSearch.entity.Product;
-import com.michael.tabularDataSearch.entity.ProductCategory;
-import com.michael.tabularDataSearch.entity.PurchaseOrder;
-import com.michael.tabularDataSearch.entity.Supplier;
-import lombok.NoArgsConstructor;
+import com.michael.tabularDataSearch.entity.*;
+import lombok.experimental.UtilityClass;
 import org.springframework.ai.document.Document;
 
 import java.util.Map;
 
-@NoArgsConstructor
+@UtilityClass
 public final class DocumentBuilders {
+
     public static Document createProductDocument(Product product) {
         String content = """
                 Назва: %s
