@@ -8,6 +8,7 @@ import com.michael.tabularDataSearch.repository.SupplierRepository;
 import com.michael.tabularDataSearch.service.ProductService;
 import com.michael.tabularDataSearch.service.ProductTools;
 import com.michael.tabularDataSearch.utils.DocumentBuilders;
+import com.michael.tabularDataSearch.utils.PromptConstants;
 import com.michael.tabularDataSearch.utils.SchemaDescriptions;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,76 +31,6 @@ import java.util.stream.Stream;
 @RestController
 @AllArgsConstructor
 public class TabularDataSearchDemoController {
-    private static final String RAG_SYSTEM_MESSAGE = """
-            You are an assistant specialized in answering about data in database
-            
-            Answer strictly based on the provided tabular context, RAG-retrieved data. 
-            Do NOT hallucinate or invent any information 
-            that is not present in the context.
-            
-            Answer only in Ukrainian
-            
-            Always follow these restrictions.
-            """;
-
-    private static final String SQL_SYSTEM_PROMPT = """
-            You are an assistant specialized in building Tabular RAG systems using Spring AI.
-            
-            Answer strictly based on the provided tabular context, RAG-retrieved data, 
-            or the results of SQL queries. Do NOT hallucinate or invent any information 
-            that is not present in the context.
-            
-            Rules:
-            1. If there is not enough context to answer the question, explicitly state that 
-               the information is insufficient.
-            5. All explanations must be grounded in structured tabular data, following 
-               Tabular RAG principles.
-            6. If no relevant context or retrieved rows are provided, you must not fabricate 
-               an answer.
-            
-            Answer only in Ukrainian
-            
-            Always follow these restrictions.
-            """;
-
-    private static final String SAFE_SQL_SYSTEM_PROMPT = """
-            You are an assistant specialized in building Tabular RAG systems using Spring AI.
-            
-            Answer strictly based on the provided tabular context, RAG-retrieved data, 
-            or the results of safe SQL queries. Do NOT hallucinate or invent any information 
-            that is not present in the context.
-            
-            Rules:
-            1. If there is not enough context to answer the question, explicitly state that 
-               the information is insufficient.
-            2. You may generate only safe SQL queries using SELECT statements. Do NOT generate 
-               or suggest INSERT, UPDATE, DELETE, ALTER, DROP, CREATE, TRUNCATE, GRANT, REVOKE, 
-               or any statements that modify the database.
-            3. Never modify data, schema, or suggest any operations that could change the state 
-               of the database.
-            4. When generating SQL, limit queries to the available tables (e.g., products,
-               product_categories, suppliers, purchase_orders).
-            5. All explanations must be grounded in structured tabular data, following 
-               Tabular RAG principles.
-            6. If no relevant context or retrieved rows are provided, you must not fabricate 
-               an answer.
-            
-            Answer only in Ukrainian
-            
-            Always follow these restrictions.
-            """;
-
-    private static final String TOOL_CALLING_SYSTEM_MESSAGE = """
-            You are an assistant specialized in answering about data in database
-            
-            Use defined tools to obtain information
-            Do NOT hallucinate or invent any information that is not present in the context.
-            
-            Answer only in Ukrainian
-            
-            Always follow these restrictions.
-            """;
-
     private final JdbcTemplate jdbcTemplate;
     private final VectorStore vectorStore;
     private final ChatClient chatClient;
@@ -114,12 +45,13 @@ public class TabularDataSearchDemoController {
      * Chat with LLM using RAG over DB data
      */
     @GetMapping("/chat/rag")
-    public String chatWithRag(@RequestParam("question") String question) {
+    public String chatWithRag(@RequestParam("question") String question,
+                              @RequestParam("topK") int topK) {
         // Obtain TopK most similar documents from DB
         List<Document> documents = vectorStore.similaritySearch(
                 SearchRequest.builder()
                         .query(question)
-                        .topK(10)
+                        .topK(topK)
                         .build()
         );
 
@@ -147,7 +79,7 @@ public class TabularDataSearchDemoController {
 
         // Send request to LLM
         return chatClient.prompt()
-                .system(RAG_SYSTEM_MESSAGE)
+                .system(PromptConstants.RAG_SYSTEM_MESSAGE)
                 .user(llmInput)
                 .call()
                 .content();
@@ -193,7 +125,7 @@ public class TabularDataSearchDemoController {
 
         // Send request to LLM
         String resultSummary = chatClient.prompt()
-                .system(SQL_SYSTEM_PROMPT)
+                .system(PromptConstants.SQL_SYSTEM_PROMPT)
                 .user(llmInput)
                 .call()
                 .content();
@@ -217,7 +149,6 @@ public class TabularDataSearchDemoController {
         // Clean SQL from fences
         generatedSQL = stripCodeFences(generatedSQL);
 
-
         // !!! Check if SQL is safe
         if (!isSelectQuery(generatedSQL)) {
             log.warn("Rejected unsafe SQL from model: \n{}", generatedSQL);
@@ -235,7 +166,7 @@ public class TabularDataSearchDemoController {
         // Send request to LLM
         String resultSummary = chatClient.prompt()
                 .user(llmInput)
-                .system(SAFE_SQL_SYSTEM_PROMPT)
+                .system(PromptConstants.SAFE_SQL_SYSTEM_PROMPT)
                 .call()
                 .content();
 
@@ -246,7 +177,7 @@ public class TabularDataSearchDemoController {
     public String chatWithToolCalling(@RequestParam(value = "question") String question) {
         try {
             return chatClient.prompt()
-                    .system(TOOL_CALLING_SYSTEM_MESSAGE)
+                    .system(PromptConstants.TOOL_CALLING_SYSTEM_MESSAGE)
                     .user(question)
                     .tools(productTools)
                     .call()
