@@ -1,8 +1,13 @@
 package com.michael.tabularDataSearch.controller;
 
 import com.michael.tabularDataSearch.entity.Product;
+import com.michael.tabularDataSearch.repository.CustomerRepository;
+import com.michael.tabularDataSearch.repository.ProductCategoryRepository;
+import com.michael.tabularDataSearch.repository.PurchaseOrderRepository;
+import com.michael.tabularDataSearch.repository.SupplierRepository;
 import com.michael.tabularDataSearch.service.ProductService;
 import com.michael.tabularDataSearch.service.ProductTools;
+import com.michael.tabularDataSearch.utils.DocumentBuilders;
 import com.michael.tabularDataSearch.utils.SchemaDescriptions;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +24,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @RestController
@@ -31,12 +37,32 @@ public class TabularDataSearchDemoController {
             Do NOT hallucinate or invent any information 
             that is not present in the context.
             
-            Answer only in ukrainian language
+            Answer only in Ukrainian
             
             Always follow these restrictions.
             """;
 
     private static final String SQL_SYSTEM_PROMPT = """
+            You are an assistant specialized in building Tabular RAG systems using Spring AI.
+            
+            Answer strictly based on the provided tabular context, RAG-retrieved data, 
+            or the results of SQL queries. Do NOT hallucinate or invent any information 
+            that is not present in the context.
+            
+            Rules:
+            1. If there is not enough context to answer the question, explicitly state that 
+               the information is insufficient.
+            5. All explanations must be grounded in structured tabular data, following 
+               Tabular RAG principles.
+            6. If no relevant context or retrieved rows are provided, you must not fabricate 
+               an answer.
+            
+            Answer only in Ukrainian
+            
+            Always follow these restrictions.
+            """;
+
+    private static final String SAFE_SQL_SYSTEM_PROMPT = """
             You are an assistant specialized in building Tabular RAG systems using Spring AI.
             
             Answer strictly based on the provided tabular context, RAG-retrieved data, 
@@ -58,7 +84,18 @@ public class TabularDataSearchDemoController {
             6. If no relevant context or retrieved rows are provided, you must not fabricate 
                an answer.
             
-            Answer only in ukrainian language
+            Answer only in Ukrainian
+            
+            Always follow these restrictions.
+            """;
+
+    private static final String TOOL_CALLING_SYSTEM_MESSAGE = """
+            You are an assistant specialized in answering about data in database
+            
+            Use defined tools to obtain information
+            Do NOT hallucinate or invent any information that is not present in the context.
+            
+            Answer only in Ukrainian
             
             Always follow these restrictions.
             """;
@@ -68,9 +105,13 @@ public class TabularDataSearchDemoController {
     private final ChatClient chatClient;
     private final ProductTools productTools;
     private final ProductService productService;
+    private final ProductCategoryRepository productCategoryRepository;
+    private final SupplierRepository supplierRepository;
+    private final CustomerRepository customerRepository;
+    private final PurchaseOrderRepository purchaseOrderRepository;
 
     /**
-     *  Chat with LLM using RAG over DB data
+     * Chat with LLM using RAG over DB data
      */
     @GetMapping("/chat/rag")
     public String chatWithRag(@RequestParam("question") String question) {
@@ -91,7 +132,8 @@ public class TabularDataSearchDemoController {
                 .map(Document::getFormattedContent)
                 .collect(Collectors.joining("\n\n---\n\n"));
 
-        String userMessage = """
+        // Create LLM input message
+        String llmInput = """
                 You are answering using the following context.
                 
                 Context:
@@ -101,48 +143,57 @@ public class TabularDataSearchDemoController {
                 %s
                 """.formatted(contextMessage, question);
 
-        log.info("LLM user message: \n {}", userMessage);
+        log.info("LLM user message: \n {}", llmInput);
 
         // Send request to LLM
         return chatClient.prompt()
                 .system(RAG_SYSTEM_MESSAGE)
-                .user(userMessage)
+                .user(llmInput)
                 .call()
                 .content();
     }
 
     /**
-     *  Chat with LLM using RAG over DB data
+     * Chat with LLM using Text To SQL over DB data
      */
     @GetMapping("/chat/text-to-sql")
     public ResponseEntity<String> textToSql(@RequestParam("question") String question) {
-        String schema = SchemaDescriptions.TABULAR_RAG_SCHEMA;
-
-        String sql = Objects.requireNonNull(chatClient.prompt()
-                        .user("Generate a SQL query for this schema and question. " +
-                                "Return ONLY the SQL. Answer in Ukrainian. Schema: " + schema + " Question: " + question)
+        // Send LLM request to generate a SQL prompt
+        String generatedSQL = Objects.requireNonNull(chatClient.prompt()
+                        .user(" Generate a SQL query for this schema and question. " +
+                                " Return ONLY the SQL. " +
+                                " Schema: " + SchemaDescriptions.TABULAR_RAG_SCHEMA +
+                                " Question: " + question)
                         .call()
                         .content())
                 .trim();
 
-        sql = stripCodeFences(sql);
-        String lower = sql.stripLeading().toLowerCase(Locale.ROOT);
+        // Clean SQL from fences
+        generatedSQL = stripCodeFences(generatedSQL);
 
+        // Form final user message for LLM
         String llmInput;
-        if (lower.startsWith("select")) {
-            log.info("Executing generated SELECT SQL: {}", sql);
+        String lowerGeneratedSQL = generatedSQL.stripLeading().toLowerCase(Locale.ROOT);
+        if (lowerGeneratedSQL.startsWith("select")) {
+            log.info("Executing generated SELECT SQL: \n{}", lowerGeneratedSQL);
 
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
-            llmInput = "Question: " + question + "\nSQL: " + sql + "\nRows: " + rows;
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(generatedSQL);
+
+            llmInput = " Question: " + question +
+                    " QL: " + generatedSQL +
+                    " Rows: " + rows;
         } else {
-            log.warn("Executing NON-SELECT SQL from LLM (unsafe demo): {}", sql);
+            log.warn("Executing NON-SELECT SQL from LLM: \n{}", lowerGeneratedSQL);
 
-            jdbcTemplate.execute(sql);
-            llmInput = "Question: " + question + "\nSQL: " + sql +
-                    "\nNote: Non-SELECT SQL was executed against the database.";
+            jdbcTemplate.execute(generatedSQL);
+
+            llmInput = " Question: " + question +
+                    " SQL: " + generatedSQL;
         }
 
+        // Send request to LLM
         String resultSummary = chatClient.prompt()
+                .system(SQL_SYSTEM_PROMPT)
                 .user(llmInput)
                 .call()
                 .content();
@@ -150,33 +201,41 @@ public class TabularDataSearchDemoController {
         return ResponseEntity.ok(resultSummary);
     }
 
-
+    /**
+     * Chat with LLM using Safe Text To SQL over DB data
+     */
     @GetMapping("/chat/text-to-sql-safe")
     public ResponseEntity<String> textToSqlSafe(@RequestParam("question") String question) {
-        String schema = SchemaDescriptions.TABULAR_RAG_SCHEMA;
-
-        String sql = Objects.requireNonNull(chatClient.prompt()
+        String generatedSQL = Objects.requireNonNull(chatClient.prompt()
                         .user("Generate a safe SQL query for this schema and question. " +
-                                "Return ONLY the SQL. Schema: " + schema + " Question: " + question)
+                                " Return ONLY the SQL. Schema: " + SchemaDescriptions.TABULAR_RAG_SCHEMA +
+                                " Question: " + question)
                         .call()
                         .content())
                 .trim();
 
-        sql = stripCodeFences(sql);
+        // Clean SQL from fences
+        generatedSQL = stripCodeFences(generatedSQL);
 
-        if (!isSelectQuery(sql)) {
-            log.warn("Rejected unsafe SQL from model: {}", sql);
+
+        // !!! Check if SQL is safe
+        if (!isSelectQuery(generatedSQL)) {
+            log.warn("Rejected unsafe SQL from model: \n{}", generatedSQL);
 
             return ResponseEntity.badRequest().body("Generated SQL is not a safe");
         }
 
-        log.info("Executing generated safe SQL: {}", sql);
+        log.info("Executing generated safe SQL: \n{}", generatedSQL);
 
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(generatedSQL);
+        String llmInput = " Question: " + question +
+                " QL: " + generatedSQL +
+                " Rows: " + rows;
 
+        // Send request to LLM
         String resultSummary = chatClient.prompt()
-                .user("Question: " + question + "\nSQL: " + sql + "\nRows: " + rows)
-                .system(SQL_SYSTEM_PROMPT)
+                .user(llmInput)
+                .system(SAFE_SQL_SYSTEM_PROMPT)
                 .call()
                 .content();
 
@@ -184,11 +243,12 @@ public class TabularDataSearchDemoController {
     }
 
     @GetMapping("/chat/tool-calling")
-    public String chatWithRagAndToolCalling(@RequestParam(value = "question") String question) {
+    public String chatWithToolCalling(@RequestParam(value = "question") String question) {
         try {
             return chatClient.prompt()
-                    .tools(productTools)
+                    .system(TOOL_CALLING_SYSTEM_MESSAGE)
                     .user(question)
+                    .tools(productTools)
                     .call()
                     .content();
         } catch (Exception e) {
@@ -196,8 +256,29 @@ public class TabularDataSearchDemoController {
         }
     }
 
-    @PostMapping("/add-products-to-vector-store")
+    @PostMapping("/add-all-db-info-to-vector-store")
     public ResponseEntity<String> addDatabaseInfoToVectorStore() {
+        List<Document> documents = Stream.of(
+                        productCategoryRepository.findAll().stream().map(DocumentBuilders::createCategoryDocument),
+                        supplierRepository.findAll().stream().map(DocumentBuilders::createSupplierDocument),
+                        customerRepository.findAll().stream().map(DocumentBuilders::createCustomerDocument),
+                        productService.findAllProducts().stream().map(DocumentBuilders::createProductDocument),
+                        purchaseOrderRepository.findAll().stream().map(DocumentBuilders::createPurchaseOrderDocument)
+                )
+                .flatMap(s -> s)
+                .toList();
+
+        if (documents.isEmpty()) {
+            return ResponseEntity.badRequest().body("No database rows found to embed");
+        }
+
+        vectorStore.add(documents);
+
+        return ResponseEntity.ok("Embedded " + documents.size() + " records into the vector store");
+    }
+
+    @PostMapping("/add-products-to-vector-store")
+    public ResponseEntity<String> addProductsInfoToVectorStore() {
         List<Product> products = productService.findAllProducts();
 
         if (products.isEmpty()) {
@@ -205,7 +286,7 @@ public class TabularDataSearchDemoController {
         }
 
         List<Document> documents = products.stream()
-                .map(this::createProductDocument)
+                .map(DocumentBuilders::createProductDocument)
                 .toList();
 
         vectorStore.add(documents);
@@ -260,36 +341,4 @@ public class TabularDataSearchDemoController {
 
         return true;
     }
-
-    private Document createProductDocument(Product product) {
-        String content = """
-                Назва: %s
-                Категорія: %s
-                Постачальник: %s
-                Ціна: %d грн
-                Залишок: %d шт.
-                Опис: %s
-                """.formatted(
-                product.getName(),
-                product.getCategory().getName(),
-                product.getSupplier().getName(),
-                product.getPrice(),
-                product.getQuantity(),
-                product.getDescription());
-
-        return new Document(content.trim(), Map.of(
-                "productId", product.getId(),
-                "productName", product.getName(),
-                "category", product.getCategory().getName(),
-                "supplier", product.getSupplier().getName()));
-    }
-
-    private String formatDocumentSource(Document document) {
-        String name = (String) document.getMetadata().getOrDefault("productName", "Невідомий товар");
-        String category = (String) document.getMetadata().getOrDefault("category", "-");
-        String supplier = (String) document.getMetadata().getOrDefault("supplier", "-");
-
-        return "%s (категорія: %s, постачальник: %s)".formatted(name, category, supplier);
-    }
-
 }
