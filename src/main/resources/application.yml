@@ -9,6 +9,9 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: none
+  sql:
+    init:
+      mode: never
   flyway:
     locations: classpath:db/migration
   ai:
@@ -28,6 +31,3 @@ spring:
         index-type: hnsw
         table-name: embeddings
 
-  sql:
-    init:
-      mode: never

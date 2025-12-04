@@ -110,22 +110,30 @@ INSERT INTO customers (name, email, loyalty_tier) VALUES
   ('Ігор Мельник', 'ihor.melnyk@example.com', 'Silver'),
   ('Марія Ткач', 'maria.tkach@example.com', 'Bronze');
 
-WITH first_order AS (
-  INSERT INTO purchase_orders (customer_id, status)
-  VALUES ((SELECT id FROM customers WHERE name = 'Олена Коваль'), 'submitted')
-  RETURNING id
-),
-second_order AS (
-  INSERT INTO purchase_orders (customer_id, status)
-  VALUES ((SELECT id FROM customers WHERE name = 'Ігор Мельник'), 'processing')
-  RETURNING id
-)
-INSERT INTO purchase_order_lines (order_id, product_id, quantity) VALUES
-  ((SELECT id FROM first_order),
-   (SELECT id FROM products WHERE name = 'Бездротова миша'), 3),
-  ((SELECT id FROM first_order),
-   (SELECT id FROM products WHERE name = 'Настільна лампа з Qi зарядкою'), 2),
-  ((SELECT id FROM second_order),
-   (SELECT id FROM products WHERE name = 'Компресор автомобільний'), 4),
-  ((SELECT id FROM second_order),
-   (SELECT id FROM products WHERE name = 'Намет на 3 особи'), 1);
+INSERT INTO purchase_orders (customer_id, product_id, quantity, status) VALUES
+  ((SELECT id FROM customers WHERE name = 'Олена Коваль'),
+   (SELECT id FROM products WHERE name = 'Бездротова миша'), 3, 'completed'),
+  ((SELECT id FROM customers WHERE name = 'Олена Коваль'),
+   (SELECT id FROM products WHERE name = 'Настільна лампа з Qi зарядкою'), 2, 'completed'),
+  ((SELECT id FROM customers WHERE name = 'Ігор Мельник'),
+   (SELECT id FROM products WHERE name = 'Компресор автомобільний'), 4, 'processing'),
+  ((SELECT id FROM customers WHERE name = 'Ігор Мельник'),
+   (SELECT id FROM products WHERE name = 'Намет на 3 особи'), 1, 'processing'),
+  ((SELECT id FROM customers WHERE name = 'Марія Ткач'),
+   (SELECT id FROM products WHERE name = 'Смарт-годинник з GPS'), 1, 'pending'),
+  ((SELECT id FROM customers WHERE name = 'Марія Ткач'),
+   (SELECT id FROM products WHERE name = 'Трекінговий рюкзак 45л'), 2, 'pending'),
+  ((SELECT id FROM customers WHERE name = 'Ігор Мельник'),
+   (SELECT id FROM products WHERE name = 'Лазерний рівень 360°'), 1, 'shipped'),
+  ((SELECT id FROM customers WHERE name = 'Олена Коваль'),
+   (SELECT id FROM products WHERE name = 'Ультрабук 14" Ryzen'), 1, 'processing'),
+  ((SELECT id FROM customers WHERE name = 'Марія Ткач'),
+   (SELECT id FROM products WHERE name = 'Повітряний зволожувач'), 2, 'completed'),
+  ((SELECT id FROM customers WHERE name = 'Ігор Мельник'),
+   (SELECT id FROM products WHERE name = 'Газовий пальник туристичний'), 3, 'shipped'),
+  ((SELECT id FROM customers WHERE name = 'Олена Коваль'),
+   (SELECT id FROM products WHERE name = 'Масажний пістолет'), 1, 'completed'),
+  ((SELECT id FROM customers WHERE name = 'Марія Ткач'),
+   (SELECT id FROM products WHERE name = 'Пуско-зарядний пристрій 12000 мА·год'), 1, 'processing'),
+  ((SELECT id FROM customers WHERE name = 'Ігор Мельник'),
+   (SELECT id FROM products WHERE name = 'Офісне крісло ергономічне'), 2, 'pending');

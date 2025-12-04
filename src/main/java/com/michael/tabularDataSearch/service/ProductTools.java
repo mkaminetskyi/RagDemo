@@ -5,7 +5,6 @@ import com.michael.tabularDataSearch.dto.ProductDetails;
 import com.michael.tabularDataSearch.entity.Customer;
 import com.michael.tabularDataSearch.entity.Product;
 import com.michael.tabularDataSearch.entity.PurchaseOrder;
-import com.michael.tabularDataSearch.entity.PurchaseOrderLine;
 import com.michael.tabularDataSearch.repository.CustomerRepository;
 import com.michael.tabularDataSearch.repository.PurchaseOrderRepository;
 import lombok.RequiredArgsConstructor;
@@ -105,7 +104,7 @@ public class ProductTools {
         return productService.summarizeInventoryByCategory();
     }
 
-    @Tool(description = "Create a purchase order for a customer with a single product line")
+    @Tool(description = "Create a purchase order for a customer and product with quantity")
     public PurchaseOrder createOrder(int customerId, int productId, int quantity) {
         log.info("Creating order for customer {} with product {} x{}", customerId, productId, quantity);
 
@@ -121,14 +120,9 @@ public class ProductTools {
 
         PurchaseOrder order = new PurchaseOrder();
         order.setCustomer(customer);
+        order.setProduct(product);
+        order.setQuantity(quantity);
         order.setStatus("NEW");
-
-        PurchaseOrderLine line = new PurchaseOrderLine();
-        line.setOrder(order);
-        line.setProduct(product);
-        line.setQuantity(quantity);
-
-        order.getLineItems().add(line);
 
         return purchaseOrderRepository.save(order);
     }

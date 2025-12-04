@@ -7,8 +7,7 @@
 - **products** – товари з полями `name`, `description`, `price`, `quantity` + зовнішні ключі:
   - `category_id` → `product_categories`
   - `supplier_id` → `suppliers`
-- **purchase_orders** – замовлення з `reference`, `status` та посиланням `customer_id` → `customers`.
-- **purchase_order_lines** – позиції замовлень з `quantity`, `unit_price` + зв'язки `order_id` → `purchase_orders`, `product_id` → `products`.
+- **purchase_orders** – записи продажів із `status`, кількістю `quantity` та посиланнями `customer_id` → `customers`, `product_id` → `products`.
 
 Схему застосовують як для табличного RAG (LLM отримує рядки як контекст), так і для текст-to-SQL, де модель генерує запити до цих таблиць.
 

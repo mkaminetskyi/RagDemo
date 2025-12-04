@@ -11,13 +11,11 @@ Tables:
   suppliers(id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, contact_email VARCHAR(255), reliability_score INTEGER NOT NULL) -- examples: 'СвітТех Поставка' (92), 'Балтія Логістик' (88)
   products(id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, price INTEGER NOT NULL, quantity INTEGER NOT NULL, category_id INTEGER REFERENCES product_categories(id), supplier_id INTEGER REFERENCES suppliers(id)) -- examples: 'Бездротова миша' (1299 UAH, qty 140), 'Настільна лампа з Qi зарядкою' (1890 UAH, qty 75)
   customers(id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, email VARCHAR(255), loyalty_tier VARCHAR(50)) -- examples: 'Олена Коваль' (Gold), 'Ігор Мельник' (Silver)
-  purchase_orders(id SERIAL PRIMARY KEY, customer_id INTEGER REFERENCES customers(id), status VARCHAR(50)) -- examples: submitted order for 'Олена Коваль', processing order for 'Ігор Мельник'
-  purchase_order_lines(id SERIAL PRIMARY KEY, order_id INTEGER REFERENCES purchase_orders(id), product_id INTEGER REFERENCES products(id), quantity INTEGER NOT NULL) -- uses same currency as products.price for product values
+  purchase_orders(id SERIAL PRIMARY KEY, customer_id INTEGER REFERENCES customers(id), product_id INTEGER REFERENCES products(id), quantity INTEGER NOT NULL, status VARCHAR(50)) -- sales records per product with purchased quantities
 Relationships:
   products.category_id -> product_categories.id
   products.supplier_id -> suppliers.id
   purchase_orders.customer_id -> customers.id
-  purchase_order_lines.order_id -> purchase_orders.id
-  purchase_order_lines.product_id -> products.id
+  purchase_orders.product_id -> products.id
 """;
 }

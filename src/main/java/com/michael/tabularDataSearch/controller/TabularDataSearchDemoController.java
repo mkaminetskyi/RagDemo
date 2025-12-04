@@ -51,8 +51,8 @@ public class TabularDataSearchDemoController {
                or any statements that modify the database.
             3. Never modify data, schema, or suggest any operations that could change the state 
                of the database.
-            4. When generating SQL, limit queries to the available tables (e.g., products, 
-               product_categories, suppliers, product_sales).
+            4. When generating SQL, limit queries to the available tables (e.g., products,
+               product_categories, suppliers, purchase_orders).
             5. All explanations must be grounded in structured tabular data, following 
                Tabular RAG principles.
             6. If no relevant context or retrieved rows are provided, you must not fabricate 
@@ -69,8 +69,12 @@ public class TabularDataSearchDemoController {
     private final ProductTools productTools;
     private final ProductService productService;
 
+    /**
+     *  Chat with LLM using RAG over DB data
+     */
     @GetMapping("/chat/rag")
     public String chatWithRag(@RequestParam("question") String question) {
+        // Obtain TopK most similar documents from DB
         List<Document> documents = vectorStore.similaritySearch(
                 SearchRequest.builder()
                         .query(question)
@@ -82,7 +86,8 @@ public class TabularDataSearchDemoController {
             documents = List.of();
         }
 
-        String context = documents.stream()
+        // Create context using documents from DB
+        String contextMessage = documents.stream()
                 .map(Document::getFormattedContent)
                 .collect(Collectors.joining("\n\n---\n\n"));
 
@@ -94,10 +99,11 @@ public class TabularDataSearchDemoController {
                 
                 Question:
                 %s
-                """.formatted(context, question);
+                """.formatted(contextMessage, question);
 
         log.info("LLM user message: \n {}", userMessage);
 
+        // Send request to LLM
         return chatClient.prompt()
                 .system(RAG_SYSTEM_MESSAGE)
                 .user(userMessage)
@@ -105,6 +111,9 @@ public class TabularDataSearchDemoController {
                 .content();
     }
 
+    /**
+     *  Chat with LLM using RAG over DB data
+     */
     @GetMapping("/chat/text-to-sql")
     public ResponseEntity<String> textToSql(@RequestParam("question") String question) {
         String schema = SchemaDescriptions.TABULAR_RAG_SCHEMA;
